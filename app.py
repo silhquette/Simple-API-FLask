@@ -7,21 +7,24 @@ from flask_mysqldb import MySQL
 app = Flask(__name__)
 app.config['SECRET_KEY'] = "asd"
 
-# Database config
+# Database configuration
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = ''
 app.config['MYSQL_DB'] = 'flaskdb_product'
-__mysql = MySQL(app)
+mysql = MySQL(app)
+
+# List to store invalidated tokens
+invalidated_tokens = []
 
 def token_required(func):
     @wraps(func)
     def decorated(*args, **kwargs):
         token = None
 
-        # Cek apakah token ada dalam header Authorization
+        # Check if token is in the Authorization header
         if 'Authorization' in request.headers:
-            # Token di header dimulai dengan "Bearer "
+            # Token in header starts with "Bearer "
             token = request.headers.get('Authorization').split(' ')[1]
         
         if not token:
@@ -31,10 +34,17 @@ def token_required(func):
                 'mimetype': 'application/json'
             }), 403
 
+        if token in invalidated_tokens:
+            return jsonify({
+                'success': False,
+                'message': 'Token has been invalidated',
+                'mimetype': 'application/json'
+            }), 403
+
         try:
-            # Mendekode token
+            # Decode the token
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-            # Meneruskan data token ke fungsi yang didekorasi
+            # Pass the token data to the decorated function
             return func(data, *args, **kwargs)
         except jwt.ExpiredSignatureError:
             return jsonify({
@@ -50,6 +60,7 @@ def token_required(func):
             }), 403
 
     return decorated
+
 
 @app.route('/product', methods = ["GET"])
 @token_required
@@ -209,15 +220,15 @@ def userStore():
             }
         ), 400
     
-@app.route('/login', methods = ['POST'])
+@app.route('/login', methods=['POST'])
 def login():
     try:
-        # catch data
+        # Catch data
         username = request.json['username']
         password = request.json['password']
 
-        # check user
-        cur = __mysql.connection.cursor()
+        # Check user
+        cur = mysql.connection.cursor()
         cur.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
         data = cur.fetchall()
         cur.close()
@@ -226,19 +237,19 @@ def login():
             session['logged_in'] = True
             token = jwt.encode({
                 'user': username,
-                'expiration': str(datetime.utcnow() + timedelta(seconds = 120))
+                'expiration': str(datetime.utcnow() + timedelta(seconds=120))
             }, app.config['SECRET_KEY'])
 
             return jsonify(
                 {
                     'success': True,
                     'token': token,
-                    'message': "Log in successful",
+                    'message': "Login successful",
                     'status': 200,
                     'mimetype': 'application/json'
                 }
             )
-        else : 
+        else:
             return jsonify(
                 {
                     'success': False, 
@@ -248,16 +259,37 @@ def login():
             ), 403
 
     except Exception as e:
-        # Jika terjadi kesalahan, rollback perubahan dan kirim respons yang sesuai
-        __mysql.connection.rollback()
+        # If an error occurs, rollback changes and send appropriate response
+        mysql.connection.rollback()
         return jsonify(
             {
                 'success': False, 
-                'message': 'Error occurred while storing data to the database: {}'.format(str(e)),
-                'status' : 400,
+                'message': f'Error occurred while storing data to the database: {str(e)}',
+                'status': 400,
                 'mimetype': 'application/json'
             }
         )
+
+@app.route('/logout', methods=['POST'])
+@token_required
+def logout(decoded_token):
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        invalidated_tokens.append(token)
+        session.pop('logged_in', None)
+        return jsonify({
+            'success': True,
+            'message': 'Logged out successfully',
+            'status': 200,
+            'mimetype': 'application/json'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Error occurred while logging out: {str(e)}',
+            'status': 400,
+            'mimetype': 'application/json'
+        })
 
 if __name__ == '__main__':
     app.run(debug=True)
