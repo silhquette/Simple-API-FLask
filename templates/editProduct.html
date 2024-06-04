@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Product</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="w-full max-w-md">
+        <form id="editProductForm" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4" data-product-id="{{ product_id }}">
+            <h2 class="mb-6 text-center text-2xl font-bold text-gray-700">Edit Product</h2>
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="name">Name</label>
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="name" type="text" placeholder="Product Name">
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="price">Price</label>
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="price" type="text" placeholder="Product Price">
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 text-sm font-bold mb-2" for="unit">Unit</label>
+                <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="unit" type="text" placeholder="Product Unit">
+            </div>
+            <div class="flex items-center justify-between">
+                <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="button" onclick="updateProduct()">
+                    Update Product
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('editProductForm');
+        const productId = form.getAttribute('data-product-id');
+
+        console.log('Product ID:', productId);
+
+        async function fetchProductData() {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/product/${productId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
+
+            const result = await response.json();
+            if (result.status === 200) {
+                document.getElementById('name').value = result.data.name;
+                document.getElementById('price').value = result.data.price;
+                document.getElementById('unit').value = result.data.unit;
+            } else {
+                alert(result.message);
+                console.log(result);
+            }
+        }
+
+        async function updateProduct() {
+            const token = localStorage.getItem('token');
+            const name = document.getElementById('name').value;
+            const price = document.getElementById('price').value;
+            const unit = document.getElementById('unit').value;
+
+            const response = await fetch(`/product/${productId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({
+                    name: name,
+                    price: price,
+                    unit: unit
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('Product updated successfully');
+                window.location.href = '/app/product-read';
+            } else {
+                alert(result.message);
+                console.log(result);
+            }
+        }
+
+        fetchProductData();
+    </script>
+</body>
+</html>

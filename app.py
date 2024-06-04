@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, render_template
 import jwt
+import bcrypt
 from datetime import datetime, timedelta
 from functools import wraps
 from flask_mysqldb import MySQL
@@ -12,7 +13,7 @@ app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = ''
 app.config['MYSQL_DB'] = 'flaskdb_product'
-mysql = MySQL(app)
+__mysql = MySQL(app)
 
 # List to store invalidated tokens
 invalidated_tokens = []
@@ -66,7 +67,7 @@ def token_required(func):
 @token_required
 def productIndex(data):
     cur = __mysql.connection.cursor()
-    cur.execute("SELECT * FROM users")
+    cur.execute("SELECT * FROM products")
     data = cur.fetchall()
     cur.close()
 
@@ -74,9 +75,43 @@ def productIndex(data):
         {
             'data': data,
             'status': 200,
+            'success': True,
             'mimetype': 'application/json'
         }
     )
+
+@app.route('/product/<id>', methods=["GET"])
+@token_required
+def getProductById(data, id):
+    cur = __mysql.connection.cursor()
+    cur.execute("SELECT * FROM products WHERE id = %s", (id))
+    product = cur.fetchone()
+    cur.close()
+
+    if product:
+        return jsonify(
+            {
+                'data': {
+                    'id': product[0],
+                    'name': product[1],
+                    'price': product[2],
+                    'unit': product[3]
+                },
+                'status': 200,
+                'success': True,
+                'mimetype': 'application/json'
+            }
+        )
+    else:
+        return jsonify(
+            {
+                'message': 'Product not found',
+                'status': 404,
+                'success': False,
+                'mimetype': 'application/json'
+            }
+        )
+
 
 @app.route('/product', methods = ['POST'])
 @token_required
@@ -116,7 +151,7 @@ def productStore(data):
 def productDestroy(data, id):
     try:
         cur = __mysql.connection.cursor()
-        cur.execute("DELETE FROM products WHERE id = %s", (id))
+        cur.execute("DELETE FROM products WHERE id = %s", (id,))
         __mysql.connection.commit()
 
         if cur.rowcount > 0:
@@ -191,34 +226,34 @@ def updateProduct(data, id):
             }
         ), 400
 
-@app.route('/user', methods = ['POST'])
+@app.route('/register', methods=['POST'])
 def userStore():
     try:
         # catch data
         username = request.json['username']
         password = request.json['password']
 
+        # Encrypt password
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
         # Input data
         cur = __mysql.connection.cursor()
-        cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, password))
+        cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password.decode('utf-8')))
         __mysql.connection.commit()
-        return jsonify(
-            {
-                'success': True,
-                'message': "User's data successfully stored to the database",
-                'mimetype': 'application/json'
-            }
-        ), 201
+        cur.close()
+
+        return jsonify({
+            'success': True,
+            'message': "User's data successfully stored to the database",
+            'mimetype': 'application/json'
+        }), 201
     except Exception as e:
-        # Jika terjadi kesalahan, rollback perubahan dan kirim respons yang sesuai
         __mysql.connection.rollback()
-        return jsonify(
-            {
-                'success': False, 
-                'message': 'Error occurred while storing data to the database: {}'.format(str(e)),
-                'mimetype': 'application/json'
-            }
-        ), 400
+        return jsonify({
+            'success': False, 
+            'message': 'Error occurred while storing data to the database: {}'.format(str(e)),
+            'mimetype': 'application/json'
+        }), 400
     
 @app.route('/login', methods=['POST'])
 def login():
@@ -228,47 +263,60 @@ def login():
         password = request.json['password']
 
         # Check user
-        cur = mysql.connection.cursor()
-        cur.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-        data = cur.fetchall()
+        cur = __mysql.connection.cursor()
+        cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
         cur.close()
 
-        if data:
+        if user and bcrypt.checkpw(password.encode('utf-8'), user[2].encode('utf-8')):
             session['logged_in'] = True
             token = jwt.encode({
                 'user': username,
                 'expiration': str(datetime.utcnow() + timedelta(seconds=120))
             }, app.config['SECRET_KEY'])
 
-            return jsonify(
-                {
-                    'success': True,
-                    'token': token,
-                    'message': "Login successful",
-                    'status': 200,
-                    'mimetype': 'application/json'
-                }
-            )
+            return jsonify({
+                'success': True,
+                'token': token,
+                'message': "Login successful",
+                'status': 200,
+                'mimetype': 'application/json'
+            })
         else:
-            return jsonify(
-                {
-                    'success': False, 
-                    'message': 'Unable to verify',
-                    'mimetype': 'application/json'
-                }
-            ), 403
+            return jsonify({
+                'success': False, 
+                'message': 'Unable to verify',
+                'mimetype': 'application/json'
+            }), 403
 
     except Exception as e:
-        # If an error occurs, rollback changes and send appropriate response
-        mysql.connection.rollback()
-        return jsonify(
-            {
-                'success': False, 
-                'message': f'Error occurred while storing data to the database: {str(e)}',
-                'status': 400,
-                'mimetype': 'application/json'
-            }
-        )
+        return jsonify({
+            'success': False, 
+            'message': f'Error occurred while storing data to the database: {str(e)}',
+            'status': 400,
+            'mimetype': 'application/json'
+        })  
+
+@app.route('/app/login', methods=['GET'])
+def appLogin(): 
+    return render_template('login.html')
+
+@app.route('/app/product-read', methods=['GET'])
+def ReadProduct(): 
+    return render_template('readProduct.html')
+
+@app.route('/app/product-create', methods=['GET'])
+def CreateProduct(): 
+    return render_template('createProduct.html')
+
+@app.route('/app/product-edit/<id>', methods=['GET'])
+def editProductPage(id): 
+    return render_template('editProduct.html', product_id=id)
+
+@app.route('/app/predict-food', methods=['GET'])
+def predictFood():
+    return render_template('predictFood.html')
+
 
 @app.route('/logout', methods=['POST'])
 @token_required
@@ -292,4 +340,4 @@ def logout(decoded_token):
         })
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, ssl_context=('cert.pem', 'key.pem'))

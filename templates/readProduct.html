@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <!-- Logout Button -->
+    <div class="absolute top-4 right-4">
+        <button id="logoutButton" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">Logout</button>
+    </div>
+
+    <div class="w-full max-w-3xl">
+        <div id="productData" class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <h2 class="mb-6 text-center text-2xl font-bold text-gray-700">Product Data</h2>
+            <div class="mb-4 flex justify-end">
+                <button class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" onclick="addProduct()">
+                    Add Product
+                </button>
+            </div>
+            <table class="min-w-full bg-white">
+                <thead>
+                    <tr>
+                        <th class="py-2 px-4 border-b border-gray-200 bg-gray-100">ID</th>
+                        <th class="py-2 px-4 border-b border-gray-200 bg-gray-100">Name</th>
+                        <th class="py-2 px-4 border-b border-gray-200 bg-gray-100">Price</th>
+                        <th class="py-2 px-4 border-b border-gray-200 bg-gray-100">Unit</th>
+                        <th class="py-2 px-4 border-b border-gray-200 bg-gray-100">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="productTableBody">
+                    <!-- Data will be populated here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function fetchProductData() {
+            const token = localStorage.getItem('token');
+            const response = await fetch('/product', {
+                method: 'GET',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
+
+            const result = await response.json();
+            if (result.status == 200) {
+                // Display product data in table
+                const productTableBody = document.getElementById('productTableBody');
+                productTableBody.innerHTML = ''; // Clear existing data
+                result.data.forEach(product => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="py-2 px-4 border-b border-gray-200">${product[0]}</td>
+                        <td class="py-2 px-4 border-b border-gray-200">${product[1]}</td>
+                        <td class="py-2 px-4 border-b border-gray-200">${product[2]}</td>
+                        <td class="py-2 px-4 border-b border-gray-200">${product[3]}</td>
+                        <td class="py-2 px-4 border-b border-gray-200">
+                            <button class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline" onclick="editProduct(${product[0]})">Edit</button>
+                            <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded focus:outline-none focus:shadow-outline" onclick="deleteProduct(${product[0]})">Delete</button>
+                        </td>
+                    `;
+                    productTableBody.appendChild(row);
+                });
+            } else {
+                // Handle error (e.g., display error message)
+                alert(result.message);
+                console.log(result);
+            }
+        }
+
+        function editProduct(id) {
+            window.location.href = `/app/product-edit/${id}`;
+        }
+
+        function addProduct() {
+            window.location.href = `/app/product-create`;
+        }
+
+        async function deleteProduct(id) {
+            const token = localStorage.getItem('token');
+            const response = await fetch(`/product/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert('Product deleted successfully');
+                fetchProductData(); // Refresh the product list
+            } else {
+                alert('Failed to delete product');
+                console.log(result);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', fetchProductData);
+        
+        document.getElementById('logoutBtn').addEventListener('click', async function() {
+            const token = localStorage.getItem('token');
+
+            const response = await fetch('/logout', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + token
+                }
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                alert('Logged out successfully');
+                // Redirect to login page or perform other actions
+                window.location.href = '/app/login';
+            } else {
+                // Handle error (e.g., display error message)
+                alert(result.message);
+            }
+        });
+    </script>
+</body>
+</html>

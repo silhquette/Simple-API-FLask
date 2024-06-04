@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Prediction</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+    <div class="w-full max-w-md">
+        <div class="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <h2 class="mb-6 text-center text-2xl font-bold text-gray-700">Food Prediction</h2>
+            <form id="uploadForm" class="mb-4">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2" for="image">Upload Image</label>
+                    <input class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" id="image" type="file" accept="image/*" required>
+                </div>
+                <div class="flex items-center justify-between">
+                    <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">Predict</button>
+                </div>
+            </form>
+            <div id="result" class="hidden">
+                <h3 class="mb-4 text-xl font-bold text-gray-700">Prediction Result:</h3>
+                <ul id="predictionList" class="list-disc pl-5 text-gray-700"></ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const imageInput = document.getElementById('image');
+            if (imageInput.files.length === 0) {
+                alert("Please select an image to upload.");
+                return;
+            }
+
+            const file = imageInput.files[0];
+            const formData = new FormData();
+            formData.append('image', file);
+
+            try {
+                const uploadResponse = await fetch('http://127.0.0.1:5069/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const uploadResult = await uploadResponse.json();
+                if (uploadResult.status.code === 200) {
+                    const imagePath = uploadResult.data.image_path;
+                    
+                    const predictionResponse = await fetch('http://127.0.0.1:5069/prediction', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ image_path: imagePath })
+                    });
+
+                    const predictionResult = await predictionResponse.json();
+                    if (predictionResult.status.code === 200) {
+                        const predictionList = document.getElementById('predictionList');
+                        predictionList.innerHTML = '';
+                        predictionResult.data.prediction.forEach(item => {
+                            const li = document.createElement('li');
+                            li.textContent = `${item.nama} (Jumlah: ${item.jumlah})`;
+                            predictionList.appendChild(li);
+                        });
+                        document.getElementById('result').classList.remove('hidden');
+                    } else {
+                        alert(predictionResult.status.message);
+                    }
+                } else {
+                    alert(uploadResult.status.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred while processing your request.');
+            }
+        });
+    </script>
+</body>
+</html>
